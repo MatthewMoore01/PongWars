@@ -2,174 +2,157 @@ import pygame
 import random
 import math
 
-# Initialize Pygame
-pygame.init()
+class PongWarsGame:
+    def __init__(self):
+        pygame.init()
+        self.WIDTH, self.HEIGHT = 1460, 900
+        self.win = pygame.display.set_mode((self.WIDTH, self.HEIGHT))
+        pygame.display.set_caption("Pong Wars")
+        self.init_colors()
+        self.init_game_variables()
 
-# Screen dimensions
-WIDTH, HEIGHT = 1000, 1000
-win = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Pong Wars")
+    def init_colors(self):
+        self.colors = {
+            'ArcticPowder': (241, 246, 244),
+            'MysticMint': (217, 232, 227),
+            'Forsythia': (255, 200, 1),
+            'DeepSaffron': (255, 153, 50),
+            'NocturnalExpedition': (17, 76, 90),
+            'OceanicNoir': (23, 43, 54)
+        }
 
-# Colors
-ArcticPowder = (241, 246, 244)
-MysticMint = (217, 232, 227)
-Forsythia = (255, 200, 1)
-DeepSaffron = (255, 153, 50)
-NocturnalExpedition = (17, 76, 90)
-OceanicNoir = (23, 43, 54)
+    def init_game_variables(self):
+        self.SQUARE_SIZE = 56
+        self.numSquaresX, self.numSquaresY = self.WIDTH // self.SQUARE_SIZE, self.HEIGHT // self.SQUARE_SIZE
+        self.squares = [[self.colors['MysticMint'] if i < self.numSquaresX / 2 else self.colors['NocturnalExpedition'] for j in range(self.numSquaresY)] for i in range(self.numSquaresX)]
+        self.total_squares = self.numSquaresX * self.numSquaresY
+        self.MIN_SPEED, self.MAX_SPEED = 1, 30
+        self.init_balls()
+        self.day_score = sum(row.count(self.colors['MysticMint']) for row in self.squares)
+        self.night_score = sum(row.count(self.colors['NocturnalExpedition']) for row in self.squares)
 
-# Game variables
-SQUARE_SIZE = 40
-numSquaresX, numSquaresY = WIDTH // SQUARE_SIZE, HEIGHT // SQUARE_SIZE
-squares = [[MysticMint if i < numSquaresX / 2 else NocturnalExpedition for j in range(numSquaresY)] for i in range(numSquaresX)]
-total_squares = numSquaresX * numSquaresY
+    def init_balls(self):
+        self.BALL_RADIUS = self.SQUARE_SIZE // 2
+        self.x1, self.y1 = (self.WIDTH + random.randrange(0, self.WIDTH / 4)) // 4, (self.HEIGHT + random.randrange(0, self.HEIGHT / 4)) // 2
+        self.dx1, self.dy1 = 12.5, -12.5
+        self.x2, self.y2 = 3 * (self.WIDTH + random.randrange(0, self.WIDTH / 4)) // 4, (self.HEIGHT + random.randrange(0, self.HEIGHT / 4)) // 2
+        self.dx2, self.dy2 = -12.5, 12.5
 
-# Constants for minimum and maximum speeds
-MIN_SPEED = 1
-MAX_SPEED = 30
+    def run(self):
+        running = True
+        clock = pygame.time.Clock()
+        while running:
+            clock.tick(60)
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
 
-# Ball properties
-x1, y1 = (WIDTH + random.randrange(0, WIDTH / 4)) // 4, (HEIGHT + random.randrange(0, HEIGHT / 4)) // 2
-dx1, dy1 = 12.5, -12.5
-x2, y2 = 3 * (WIDTH + random.randrange(0, WIDTH / 4)) // 4, (HEIGHT + random.randrange(0, HEIGHT / 4)) // 2
-dx2, dy2 = -12.5, 12.5
-BALL_RADIUS = SQUARE_SIZE // 2
+            self.update_game_state()
+            self.draw_game()
+            pygame.display.flip()
+        pygame.quit()
 
+    def update_game_state(self):
+        self.update_speeds()
+        self.update_ball_positions_and_check_collisions()
 
-# Main game loop
-running = True
-clock = pygame.time.Clock()
+    def update_speeds(self):
+        # Calculate and update speeds based on current scores
+        day_speed = self.calculate_speed(self.day_score, self.total_squares)
+        night_speed = self.calculate_speed(self.night_score, self.total_squares)
+        self.dx1, self.dy1 = self.adjust_speed(self.dx1, self.dy1, day_speed)
+        self.dx2, self.dy2 = self.adjust_speed(self.dx2, self.dy2, night_speed)
 
-# Initialize scores based on the starting layout
-day_score = sum(row.count(MysticMint) for row in squares)
-night_score = sum(row.count(NocturnalExpedition) for row in squares)
+    def adjust_speed(self, dx, dy, speed):
+        direction = math.hypot(dx, dy)
+        if direction != 0:
+            dx = (dx / direction) * speed
+            dy = (dy / direction) * speed
+        return dx, dy
 
+    def update_ball_positions_and_check_collisions(self):
+        # Update ball positions and check for color change collisions
+        self.dx1, self.dy1 = self.update_color_and_score(self.x1, self.y1, self.colors['MysticMint'], self.dx1, self.dy1)
+        self.dx2, self.dy2 = self.update_color_and_score(self.x2, self.y2, self.colors['NocturnalExpedition'], self.dx2, self.dy2)
+        self.x1 += self.dx1
+        self.y1 += self.dy1
+        self.x2 += self.dx2
+        self.y2 += self.dy2
+        self.dx1, self.dy1 = self.check_collision(self.x1, self.y1, self.dx1, self.dy1)
+        self.dx2, self.dy2 = self.check_collision(self.x2, self.y2, self.dx2, self.dy2)
 
-def scale_value(value, original_min, original_max, new_min, new_max):
-    # Compute the ratio of the difference between the value and original min to the size of the original range
-    ratio = (value - original_min) / (original_max - original_min)
+    def calculate_speed(self, score, total_squares):
+        # Calculate the percentage of squares controlled
+        percentage = score / total_squares
+        # Map the percentage to a speed between MIN_SPEED and MAX_SPEED
+        speed = self.MIN_SPEED + percentage * (self.MAX_SPEED - self.MIN_SPEED)
+        return speed
 
-    # Apply this ratio to the new range
-    new_value = new_min + (ratio * (new_max - new_min))
+    def is_opposite_color(self, ball_color, square_color):
+        return (ball_color == self.colors['MysticMint'] and square_color == self.colors['NocturnalExpedition']) or \
+            (ball_color == self.colors['NocturnalExpedition'] and square_color == self.colors['MysticMint'])
 
-    return new_value
+    def update_color_and_score(self, x, y, ball_color, dx, dy):
+        global day_score, night_score
+        x += dx
+        y += dy
+        left_edge = x - self.BALL_RADIUS
+        right_edge = x + self.BALL_RADIUS
+        top_edge = y - self.BALL_RADIUS
+        bottom_edge = y + self.BALL_RADIUS
 
+        squares_changed = False
+        for i in range(int(left_edge // self.SQUARE_SIZE), int(math.ceil(right_edge / self.SQUARE_SIZE))):
+            for j in range(int(top_edge // self.SQUARE_SIZE), int(math.ceil(bottom_edge / self.SQUARE_SIZE))):
+                if 0 <= i < self.numSquaresX and 0 <= j < self.numSquaresY:
+                    square_color = self.squares[i][j]
+                    if self.is_opposite_color(ball_color, square_color):
+                        self.squares[i][j] = ball_color
+                        squares_changed = True
+                        if ball_color == self.colors['MysticMint']:
+                            self.day_score += 1
+                            self.night_score -= 1
+                        else:
+                            self.night_score += 1
+                            self.day_score -= 1
+                        pygame.draw.rect(self.win, ball_color, (
+                        i * self.SQUARE_SIZE, j * self.SQUARE_SIZE, self.SQUARE_SIZE, self.SQUARE_SIZE))
 
-def calculate_speed(score, total_squares):
-    # Calculate the percentage of squares controlled
-    percentage = (score / total_squares)
-    # Map the percentage to a speed between MIN_SPEED and MAX_SPEED
-    speed = percentage * MAX_SPEED
-    return speed
+        if squares_changed:
+            speed = math.hypot(dx, dy)
+            angle = math.atan2(-dy, -dx) + random.uniform(-math.pi / 8, math.pi / 8)
+            dx = speed * math.cos(angle)
+            dy = speed * math.sin(angle)
+        return dx, dy
 
+    def check_collision(self, x, y, dx, dy):
+        if x + dx > self.WIDTH - self.BALL_RADIUS or x + dx < self.BALL_RADIUS:
+            dx = -dx
+        if y + dy > self.HEIGHT - self.BALL_RADIUS or y + dy < self.BALL_RADIUS:
+            dy = -dy
+        return dx, dy
 
-def is_opposite_color(ball_color, square_color):
-    return (ball_color == MysticMint and square_color == NocturnalExpedition) or \
-           (ball_color == NocturnalExpedition and square_color == MysticMint)
+    def draw_game(self):
+        self.win.fill(self.colors['OceanicNoir'])
+        self.draw_squares()
+        self.draw_balls()
+        self.draw_score()
 
+    def draw_squares(self):
+        for i in range(self.numSquaresX):
+            for j in range(self.numSquaresY):
+                pygame.draw.rect(self.win, self.squares[i][j], (i * self.SQUARE_SIZE, j * self.SQUARE_SIZE, self.SQUARE_SIZE, self.SQUARE_SIZE))
 
-def update_color_and_score(x, y, ball_color, dx, dy):
-    global day_score, night_score
-    # Adjust x, y to point to the ball's center for accurate collision checking
-    x += dx
-    y += dy
-    # Calculate ball edges
-    left_edge = x - BALL_RADIUS
-    right_edge = x + BALL_RADIUS
-    top_edge = y - BALL_RADIUS
-    bottom_edge = y + BALL_RADIUS
+    def draw_balls(self):
+        pygame.draw.circle(self.win, self.colors['OceanicNoir'], (int(self.x1), int(self.y1)), self.BALL_RADIUS)
+        pygame.draw.circle(self.win, self.colors['MysticMint'], (int(self.x2), int(self.y2)), self.BALL_RADIUS)
 
-    # Check all squares the ball overlaps with
-    squares_changed = False
-    for i in range(int(left_edge // SQUARE_SIZE), int(math.ceil(right_edge / SQUARE_SIZE))):
-        for j in range(int(top_edge // SQUARE_SIZE), int(math.ceil(bottom_edge / SQUARE_SIZE))):
-            if 0 <= i < numSquaresX and 0 <= j < numSquaresY:
-                square_color = squares[i][j]
-                if is_opposite_color(ball_color, square_color):
-                    # Change the color of the square
-                    squares[i][j] = ball_color
-                    squares_changed = True
-                    # Update the score
-                    if ball_color == MysticMint:
-                        day_score += 1
-                        night_score -= 1
-                    else:
-                        night_score += 1
-                        day_score -= 1
-                    # Draw only the square that has changed
-                    pygame.draw.rect(win, ball_color, (i * SQUARE_SIZE, j * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE))
+    def draw_score(self):
+        font = pygame.font.SysFont(None, 36)
+        score_text = font.render(f'Day: {self.day_score} | Night: {self.night_score}', True, (0, 0, 0))
+        self.win.blit(score_text, (20, 20))
 
-    # If any squares changed, calculate new speed and direction
-    if squares_changed:
-        speed = math.hypot(dx, dy)
-        angle = math.atan2(-dy, -dx) + random.uniform(-math.pi/8, math.pi/8)
-        dx = speed * math.cos(angle)
-        dy = speed * math.sin(angle)
-
-    return dx, dy
-
-
-
-def check_collision(x, y, dx, dy):
-    if x + dx > WIDTH - BALL_RADIUS or x + dx < BALL_RADIUS:
-        dx = -dx
-    if y + dy > HEIGHT - BALL_RADIUS or y + dy < BALL_RADIUS:
-        dy = -dy
-    return dx, dy
-
-
-while running:
-    clock.tick(60)  # 60 frames per second
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
-
-    # Update speeds based on the current scores
-    day_speed = calculate_speed(day_score, total_squares)
-    night_speed = calculate_speed(night_score, total_squares)
-
-    # Normalize the direction vectors and scale them by the new speeds
-    day_direction = math.hypot(dx1, dy1)
-    night_direction = math.hypot(dx2, dy2)
-
-    # Avoid division by zero in case of no movement
-    if day_direction != 0:
-        dx1 = (dx1 / day_direction) * day_speed
-        dy1 = (dy1 / day_direction) * day_speed
-
-    if night_direction != 0:
-        dx2 = (dx2 / night_direction) * night_speed
-        dy2 = (dy2 / night_direction) * night_speed
-
-    # Inside the main loop
-    dx1, dy1 = update_color_and_score(x1, y1, MysticMint, dx1, dy1)
-    dx2, dy2 = update_color_and_score(x2, y2, NocturnalExpedition, dx2, dy2)
-
-    # Now apply the updated velocities to the ball positions
-    x1 += dx1
-    y1 += dy1
-    x2 += dx2
-    y2 += dy2
-
-    # Collision with walls
-    dx1, dy1 = check_collision(x1, y1, dx1, dy1)
-    dx2, dy2 = check_collision(x2, y2, dx2, dy2)
-
-    # Drawing the game
-    win.fill(OceanicNoir)
-    for i in range(numSquaresX):
-        for j in range(numSquaresY):
-            pygame.draw.rect(win, squares[i][j], (i*SQUARE_SIZE, j*SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE))
-
-    # Draw balls
-    pygame.draw.circle(win, OceanicNoir, (int(x1), int(y1)), BALL_RADIUS)
-    pygame.draw.circle(win, MysticMint, (int(x2), int(y2)), BALL_RADIUS)
-
-    font = pygame.font.SysFont(None, 36)
-    score_text = font.render(f'Day: {day_score} | Night: {night_score}', True, (0, 0, 0))
-    win.blit(score_text, (20, 20))
-
-    # Update the display once per frame
-    pygame.display.flip()
-
-pygame.quit()
+# Run the game
+if __name__ == "__main__":
+    game = PongWarsGame()
+    game.run()
