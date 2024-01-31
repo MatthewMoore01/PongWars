@@ -66,8 +66,75 @@ class PongWarsGame:
 
     def update_game_state(self):
         self.update_speeds()
-        self.update_ball_positions_and_check_collisions()
+        self.handle_collisions()
         self.update_temporary_squares()
+        self.update_color_and_score(self.x1, self.y1, self.colors['MysticMint'], self.dx1, self.dy1)
+        self.update_color_and_score(self.x2, self.y2, self.colors['OceanicNoir'], self.dx2, self.dy2)
+
+    def handle_collisions(self):
+        # Define the game's boundary as a rectangle
+        boundary_rect = pygame.Rect(0, 0, self.WIDTH, self.HEIGHT)
+
+        # Handle collision with the boundary for both balls
+        self.x1, self.y1, self.dx1, self.dy1 = self.handle_collision(self.x1, self.y1, self.dx1, self.dy1,
+                                                                     boundary_rect)
+        self.x2, self.y2, self.dx2, self.dy2 = self.handle_collision(self.x2, self.y2, self.dx2, self.dy2,
+                                                                     boundary_rect)
+
+        # Update positions
+        self.x1 += self.dx1
+        self.y1 += self.dy1
+        self.x2 += self.dx2
+        self.y2 += self.dy2
+
+        # Handle collision with temporary squares for both balls
+        for square in self.temporary_squares:
+            square_rect = pygame.Rect(square[0][0], square[0][1], 4 * self.SQUARE_SIZE, 4 * self.SQUARE_SIZE)
+            self.x1, self.y1, self.dx1, self.dy1 = self.handle_collision(self.x1, self.y1, self.dx1, self.dy1,
+                                                                         square_rect)
+            self.x2, self.y2, self.dx2, self.dy2 = self.handle_collision(self.x2, self.y2, self.dx2, self.dy2,
+                                                                         square_rect)
+
+    def handle_collision(self, x, y, dx, dy, rect):
+        """
+        Handles collision detection and resolution using vector reflection.
+
+        Parameters:
+        x, y (float): Ball's current position.
+        dx, dy (float): Ball's current velocity.
+        rect (pygame.Rect): The rectangle to check collision against.
+
+        Returns:
+        (float, float, float, float): New position and velocity of the ball.
+        """
+        # Calculate the ball's new position
+        new_x = x + dx
+        new_y = y + dy
+
+        # Create a Rect for the ball at the new position
+        ball_rect = pygame.Rect(new_x - self.BALL_RADIUS, new_y - self.BALL_RADIUS, self.BALL_RADIUS * 2,
+                                self.BALL_RADIUS * 2)
+
+        # Check for collision with the rectangle
+        collision = rect.clipline(ball_rect.topleft, ball_rect.bottomleft) or \
+                    rect.clipline(ball_rect.topleft, ball_rect.topright) or \
+                    rect.clipline(ball_rect.bottomleft, ball_rect.bottomright) or \
+                    rect.clipline(ball_rect.topright, ball_rect.bottomright)
+
+        if collision:
+            # Calculate the normal at the collision point
+            collision_dx = collision[1][0] - collision[0][0]
+            collision_dy = collision[1][1] - collision[0][1]
+            normal = pygame.math.Vector2(-collision_dy, collision_dx).normalize()
+
+            # Reflect the ball's velocity vector across the collision normal
+            velocity = pygame.math.Vector2(dx, dy)
+            reflect = velocity.reflect(normal)
+
+            return new_x, new_y, reflect.x, reflect.y
+
+        # If no collision, return the position and velocity unchanged
+        return x + dx, y + dy, dx, dy
 
     def update_speeds(self):
         # Calculate and update speeds based on current scores
@@ -82,17 +149,6 @@ class PongWarsGame:
             dx = (dx / direction) * speed
             dy = (dy / direction) * speed
         return dx, dy
-
-    def update_ball_positions_and_check_collisions(self):
-        # Update ball positions and check for color change collisions
-        self.dx1, self.dy1 = self.update_color_and_score(self.x1, self.y1, self.colors['MysticMint'], self.dx1, self.dy1)
-        self.dx2, self.dy2 = self.update_color_and_score(self.x2, self.y2, self.colors['OceanicNoir'], self.dx2, self.dy2)
-        self.x1 += self.dx1
-        self.y1 += self.dy1
-        self.x2 += self.dx2
-        self.y2 += self.dy2
-        self.dx1, self.dy1 = self.check_collision(self.x1, self.y1, self.dx1, self.dy1)
-        self.dx2, self.dy2 = self.check_collision(self.x2, self.y2, self.dx2, self.dy2)
 
     def calculate_speed(self, score, total_squares):
         # Calculate the percentage of squares controlled
@@ -110,7 +166,6 @@ class PongWarsGame:
             (ball_color == self.colors['OceanicNoir'] and square_color == self.colors['MysticMint'])
 
     def update_color_and_score(self, x, y, ball_color, dx, dy):
-        global day_score, night_score
         x += dx
         y += dy
         left_edge = x - self.BALL_RADIUS
@@ -142,33 +197,13 @@ class PongWarsGame:
             dy = speed * math.sin(angle)
         return dx, dy
 
-    def check_collision(self, x, y, dx, dy):
-        if x + dx > self.WIDTH - self.BALL_RADIUS or x + dx < self.BALL_RADIUS:
-            dx = -dx
-        if y + dy > self.HEIGHT - self.BALL_RADIUS or y + dy < self.BALL_RADIUS:
-            dy = -dy
-        return dx, dy
-
     def update_temporary_squares(self):
-        # Update the remaining time for each square and remove expired ones
         self.temporary_squares = [((left, top), time - 1) for (left, top), time in self.temporary_squares if time > 1]
 
-        # Check for ball collisions with temporary squares
         for (left, top), _ in self.temporary_squares:
             square_rect = pygame.Rect(left, top, 4 * self.SQUARE_SIZE, 4 * self.SQUARE_SIZE)
-            if square_rect.colliderect(pygame.Rect(self.x1 - self.BALL_RADIUS, self.y1 - self.BALL_RADIUS, self.BALL_RADIUS * 2, self.BALL_RADIUS * 2)):
-                self.dx1, self.dy1 = self.bounce_off_square(self.x1, self.y1, self.dx1, self.dy1, square_rect)
-            if square_rect.colliderect(pygame.Rect(self.x2 - self.BALL_RADIUS, self.y2 - self.BALL_RADIUS, self.BALL_RADIUS * 2, self.BALL_RADIUS * 2)):
-                self.dx2, self.dy2 = self.bounce_off_square(self.x2, self.y2, self.dx2, self.dy2, square_rect)
-
-
-    def bounce_off_square(self, x, y, dx, dy, square_rect):
-        # Check which side of the square the ball collided with and reverse the appropriate velocity component
-        if x < square_rect.left or x > square_rect.right:
-            dx = -dx
-        if y < square_rect.top or y > square_rect.bottom:
-            dy = -dy
-        return dx, dy
+            self.x1, self.y1, self.dx1, self.dy1 = self.check_and_resolve_square_collision(self.x1, self.y1, self.dx1, self.dy1, square_rect)
+            self.x2, self.y2, self.dx2, self.dy2 = self.check_and_resolve_square_collision(self.x2, self.y2, self.dx2, self.dy2, square_rect)
 
     def draw_game(self):
         self.win.fill(self.colors['OceanicNoir'])
