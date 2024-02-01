@@ -112,10 +112,6 @@ class PongWarsGame:
             if new_y - self.BALL_RADIUS < rect.top or new_y + self.BALL_RADIUS > rect.bottom:
                 dy = -dy  # Reverse vertical velocity
 
-            # Adjust position to prevent the ball from sticking to the boundary
-            new_x = min(max(self.BALL_RADIUS, new_x), rect.width - self.BALL_RADIUS)
-            new_y = min(max(self.BALL_RADIUS, new_y), rect.height - self.BALL_RADIUS)
-
         return new_x, new_y, dx, dy
 
     def update_speeds(self):
@@ -172,10 +168,11 @@ class PongWarsGame:
                         i * self.SQUARE_SIZE, j * self.SQUARE_SIZE, self.SQUARE_SIZE, self.SQUARE_SIZE))
 
         if squares_changed:
-            speed = math.hypot(dx, dy)
-            angle = math.atan2(-dy, -dx) + random.uniform(-math.pi / 8, math.pi / 8)
-            dx = speed * math.cos(angle)
-            dy = speed * math.sin(angle)
+                square_rect = pygame.Rect(1, 1, 4 * self.SQUARE_SIZE, 4 * self.SQUARE_SIZE)
+                self.x1, self.y1, self.dx1, self.dy1 = self.handle_collision(self.x1, self.y1, self.dx1, self.dy1,
+                                                                             square_rect)
+                self.x2, self.y2, self.dx2, self.dy2 = self.handle_collision(self.x2, self.y2, self.dx2, self.dy2,
+                                                                             square_rect)
         return dx, dy
 
     def update_temporary_squares(self):
